@@ -13,46 +13,44 @@ class Program
 {
     static async Task Main(string[] args)
     {
-            Console.WriteLine("Starting Modpack Processing...");
+        Console.WriteLine("Starting Modpack Processing...");
 
-            string zipFilePath = args[0];
-            string extractionDirectory = Path.Combine(Directory.GetCurrentDirectory(), ".modpack");
-            Directory.CreateDirectory(extractionDirectory);
+        string zipFilePath = args[0];
+        string extractionDirectory = Path.Combine(Directory.GetCurrentDirectory(), ".modpack");
+        Directory.CreateDirectory(extractionDirectory);
 
-            string outputFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory.ToString(), "ModpackOutput");
-            Directory.CreateDirectory(outputFolderPath);
-            Console.WriteLine($"Created output folder: {outputFolderPath}");
+        string outputFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory.ToString(), "ModpackOutput");
+        Directory.CreateDirectory(outputFolderPath);
+        Console.WriteLine($"Created output folder: {outputFolderPath}");
 
 
-            Console.WriteLine($"Created extraction directory: {extractionDirectory}");
-            ExtractFilesFromZip(zipFilePath, extractionDirectory, outputFolderPath, "manifest.json", "modlist.html");
-            Console.WriteLine("Files extracted successfully.");
+        Console.WriteLine($"Created extraction directory: {extractionDirectory}");
+        ExtractFilesFromZip(zipFilePath, extractionDirectory, outputFolderPath, "manifest.json", "modlist.html");
+        Console.WriteLine("Files extracted successfully.");
 
             
 
-            ModpackData modpackData = ReadManifestJson(Path.Combine(extractionDirectory, "manifest.json"));
-            string modlistHtmlPath = Path.Combine(extractionDirectory, "modlist.html");
-            string[] modLinks = ReadModListLinks(modlistHtmlPath);
+        ModpackData modpackData = ReadManifestJson(Path.Combine(extractionDirectory, "manifest.json"));
+        string modlistHtmlPath = Path.Combine(extractionDirectory, "modlist.html");
+        string[] modLinks = ReadModListLinks(modlistHtmlPath);
 
-            if (modLinks.Length > 0)
+        if (modLinks.Length > 0)
+        {
+            for (int i = 0; i < Math.Min(modLinks.Length, modpackData.files.Count); i++)
             {
-                for (int i = 0; i < Math.Min(modLinks.Length, modpackData.files.Count); i++)
-                {
-                    modpackData.files[i].link = modLinks[i];
-                }
+                modpackData.files[i].link = modLinks[i];
             }
+        }
 
-            string outputFilePath = Path.Combine(outputFolderPath, $"{SanitizeName(modpackData.name)}_{modpackData.version}.txt");
-            Console.WriteLine($"Writing modpack info to: {outputFilePath}");
-            WriteModpackInfo(outputFilePath, modpackData);
+        string outputFilePath = Path.Combine(outputFolderPath, $"{SanitizeName(modpackData.name)}_{modpackData.version}.txt");
+        Console.WriteLine($"Writing modpack info to: {outputFilePath}");
+        WriteModpackInfo(outputFilePath, modpackData);
 
-            Console.WriteLine("Processing mod links and downloading files...");
-            await ProcessLinksAndDownloadAsync(modpackData.files, outputFolderPath);
+        Console.WriteLine("Processing mod links and downloading files...");
+        await ProcessLinksAndDownloadAsync(modpackData.files, outputFolderPath);
 
-            Console.WriteLine($"Deleting extraction directory: {extractionDirectory}");
-            Directory.Delete(extractionDirectory, true);
-
-        //Need to move the contents of override folder to same mod output folder, and need to remove +'s from names in mods names.
+        Console.WriteLine($"Deleting extraction directory: {extractionDirectory}");
+        Directory.Delete(extractionDirectory, true);
         Console.WriteLine("Processing completed successfully.");
     }
 
