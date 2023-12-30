@@ -2,7 +2,7 @@
   "profiles": {
     "Curseforge-folderizer": {
       "commandName": "Project",
-      "commandLineArgs": "\".\\TerraFirmaGreg-1.12-4.4.2-cf-extended.zip\""
+      "commandLineArgs": "\"https://www.curseforge.com/minecraft/modpacks/the-pixelmon-modpack/files/4838829\""
     }
   }
 }

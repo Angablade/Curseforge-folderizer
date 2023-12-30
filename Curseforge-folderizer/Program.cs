@@ -8,20 +8,21 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.IO.Compression;
 using PuppeteerSharp;
+using System.Web;
+using System.Collections;
 
 class Program
 {
-    static async Task<string> Main(string[] args)
+    static async Task Main(string[] args)
     {
         Console.WriteLine("Starting Modpack Processing...");
 
         string zipFilePath = args[0];
-
-        if(zipFilePath == null) {
-            return ("You forgot to enter something.");
-        }
-        else if(IsWebUrl(zipFilePath))
+        
+        
+        if(!File.Exists(zipFilePath) && zipFilePath.ToLower().StartsWith("http"))
         {
+            Console.WriteLine("Downloading modpack!");
             zipFilePath = await DownloadModpack(zipFilePath);
         }
 
@@ -40,16 +41,36 @@ class Program
             
 
         ModpackData modpackData = ReadManifestJson(Path.Combine(extractionDirectory, "manifest.json"));
-        string modlistHtmlPath = Path.Combine(extractionDirectory, "modlist.html");
-        string[] modLinks = ReadModListLinks(modlistHtmlPath);
 
-        if (modLinks.Length > 0)
+        try
         {
-            for (int i = 0; i < Math.Min(modLinks.Length, modpackData.files.Count); i++)
+            Console.WriteLine("Reading modlist.html");
+            string modlistHtmlPath = Path.Combine(extractionDirectory, "modlist.html");
+            string[] modLinks = ReadModListLinks(modlistHtmlPath);
+
+            if (modLinks.Length > 0)
             {
-                modpackData.files[i].link = modLinks[i];
+                for (int i = 0; i < Math.Min(modLinks.Length, modpackData.files.Count); i++)
+                {
+                    modpackData.files[i].link = modLinks[i];
+                }
+            }
+        }catch (Exception ex)
+        {
+            Console.WriteLine("Failed to read Modlist.html, trying alt method.");
+            foreach (var file in modpackData.files)
+            {
+                try
+                {
+                    file.link = await GetFirstGoogleSearchResultUrl(file.projectID.ToString());
+                }
+                catch {
+                    Console.WriteLine("Failed hard. Crashing out!");
+                    Environment.Exit(0);
+                }
             }
         }
+
 
         string outputFilePath = Path.Combine(outputFolderPath, $"{SanitizeName(modpackData.name)}_{modpackData.version}.txt");
         Console.WriteLine($"Writing modpack info to: {outputFilePath}");
@@ -61,8 +82,6 @@ class Program
         Console.WriteLine($"Deleting extraction directory: {extractionDirectory}");
         Directory.Delete(extractionDirectory, true);
         Console.WriteLine("Processing completed successfully.");
-        
-        return "Task Finished";
     }
 
     static void ExtractFilesFromZip(string zipFilePath, string extractionDirectory, string outputFolderPath, params string[] fileNames)
@@ -75,26 +94,32 @@ class Program
                 Parallel.ForEach(zipArchive.Entries, (entry, state) =>
                 {
                     if (entry.Length > 3) { 
-                         Console.WriteLine("Reading file: " + entry);
+                        Console.WriteLine("Reading file: " + entry);
                         string entryName = DetectAndConvertEntryName(zipArchive, entry.FullName);
                         entryName = entryName.Substring(entryName.IndexOf("/") + 1).Replace("/".ToArray()[0], Path.DirectorySeparatorChar);
-                    
-                        if (fileNames.Contains(entryName))
+
+                        try { 
+                            if (fileNames.Contains(entryName))
+                            {
+                                string filePath = Path.Combine(extractionDirectory, entryName);
+                                string fileath = Path.Combine(outputFolderPath, entryName);
+                                Directory.CreateDirectory(Path.GetDirectoryName(fileath) ?? string.Empty);
+                                Console.WriteLine("Extracting: " + entryName);
+                                entry.ExtractToFile(filePath, true);
+                                entry.ExtractToFile(fileath, true);
+                            }
+                            else
+                            {
+                                string filePath = Path.Combine(outputFolderPath, entryName);
+                                Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? string.Empty);
+                                Console.WriteLine("Extracting: " + entryName);
+                                entry.ExtractToFile(filePath, true);
+                            }
+                        }catch (Exception ex)
                         {
-                            string filePath = Path.Combine(extractionDirectory, entryName);
-                            string fileath = Path.Combine(outputFolderPath, entryName);
-                            Directory.CreateDirectory(Path.GetDirectoryName(fileath) ?? string.Empty);
-                            Console.WriteLine("Extracting: " + entryName);
-                            entry.ExtractToFile(filePath, true);
-                            entry.ExtractToFile(fileath, true);
+                            Console.WriteLine(ex.ToString());
                         }
-                        else
-                        {
-                            string filePath = Path.Combine(outputFolderPath, entryName);
-                            Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? string.Empty);
-                            Console.WriteLine("Extracting: " + entryName);
-                            entry.ExtractToFile(filePath, true);
-                        }
+
                     }
                    
                 });
@@ -154,6 +179,8 @@ class Program
         }
     }
 
+
+
     static async Task<string> DownloadModpack(string downloadLink) {
         var browserFetcherOptions = new BrowserFetcherOptions();
         await new BrowserFetcher(browserFetcherOptions).DownloadAsync();
@@ -198,7 +225,8 @@ class Program
 
         Console.WriteLine($"Waiting for file: {fileName}");
 
-        await WaitForFileAsync(AppDomain.CurrentDomain.BaseDirectory, fileName);
+        fileName = await WaitForFileAsync(AppDomain.CurrentDomain.BaseDirectory, fileName);
+        Console.WriteLine($"Found: {fileName}!");
 
         Console.WriteLine($"Modpack downloaded!");
 
@@ -264,19 +292,77 @@ class Program
         }
     }
 
-    static async Task WaitForFileAsync(string directory, string fileName)
+    static async Task<string> WaitForFileAsync(string directory, string fileName)
     {
-        while (!File.Exists(Path.Combine(directory, fileName)))
+        while (true)
         {
+            if (File.Exists(Path.Combine(directory, fileName))){
+                Console.WriteLine($"Finding: {fileName}");
+                break;
+            }
+
+            if (File.Exists(Path.Combine(directory, fileName.Replace(" ", "+"))))
+            {
+                fileName = fileName.Replace(" ", "+");
+                Console.WriteLine($"Finding: {fileName}");
+                break;
+            }
             Console.Write(".");
-            await Task.Delay(1000);
+            await Task.Delay(2000);
         }
+        return fileName;
     }
 
-
-    static bool IsWebUrl(string url)
+    static async Task<string> GetFirstGoogleSearchResultUrl(string query)
     {
-        return Uri.TryCreate(url, UriKind.Absolute, out Uri uriResult) && uriResult.Scheme == Uri.UriSchemeHttp;
+        string firstResultUrl = "";
+        using (HttpClient client = new HttpClient())
+        {
+            HttpResponseMessage response = await client.GetAsync($"https://www.google.com/search?q=curseforge+project+ID+\"{query}\"");
+            if (response.IsSuccessStatusCode)
+            {
+                string responseContent = await response.Content.ReadAsStringAsync();
+                foreach (string str in responseContent.Split('"'))
+                {
+                    string decodedStr = HttpUtility.UrlDecode(str).Replace("/url?q=", "");
+                    if (decodedStr.Contains("curseforge.com"))
+                    {
+                        if (decodedStr.Contains("/mc-mods/"))
+                        {
+                            try
+                            {
+                                string substring = decodedStr.Substring(decodedStr.IndexOf("/mc-mods/"));
+                                substring = substring.Replace("/mc-mods/", "");
+                                firstResultUrl = substring;
+                                return firstResultUrl;
+                            }
+                            catch (Exception ex)
+                            {
+                            }
+                        }
+                        if (decodedStr.Contains("/projects/"))
+                        {
+                            try
+                            {
+                                string substring = decodedStr.Substring(decodedStr.IndexOf("/projects/"));
+                                substring = substring.Replace("/projects/", "");
+                                firstResultUrl = substring;
+                                return firstResultUrl;
+                            }
+                            catch (Exception ex)
+                            {
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("[HTTP] 503 Forbidden");
+            }
+        }
+
+        return "";
     }
 }
 
