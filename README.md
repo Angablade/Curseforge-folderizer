@@ -1,4 +1,5 @@
 <img src="/Curseforge-folderizer/curseforge-folderizer.png" width="500" />
+
 ## Curseforge Folderizer
 
 A tool that will build a semi-complete instance folder from a CurseForge URL or ZIP.
