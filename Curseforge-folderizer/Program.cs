@@ -58,17 +58,12 @@ class Program
         }catch (Exception ex)
         {
             Console.WriteLine("Failed to read Modlist.html, trying alt method.");
+            List<Task> tasks = new List<Task>();
             foreach (var file in modpackData.files)
             {
-                try
-                {
-                    file.link = await GetFirstGoogleSearchResultUrl(file.projectID.ToString());
-                }
-                catch {
-                    Console.WriteLine("Failed hard. Crashing out!");
-                    Environment.Exit(0);
-                }
+                tasks.Add(ProcessFileAsync(file));
             }
+            await Task.WhenAll(tasks);
         }
 
 
@@ -164,7 +159,25 @@ class Program
     {
         return Regex.Replace(name, "[^a-zA-Z0-9]", "_");
     }
-
+    static async Task ProcessFileAsync(FileData file)
+    {
+        try
+        {
+            file.link = await GetFirstGoogleSearchResultUrl(file.projectID.ToString());
+            if (file.link.StartsWith("#")) {
+                file.link = "https://www.curseforge.com/minecraft/texture-packs/" + file.link.Replace("#", "");
+            }
+            else {
+                file.link = "https://www.curseforge.com/minecraft/mc-mods/" + file.link;
+            }
+            Console.WriteLine($"Project Mask: {file.projectID.ToString()} -> {file.link}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to get link for project ID {file.projectID}. Exception: {ex}");
+            Environment.Exit(1);
+        }
+    }
     static void WriteModpackInfo(string outputFilePath, ModpackData modpackData)
     {
         using (StreamWriter writer = new StreamWriter(outputFilePath))
@@ -178,8 +191,6 @@ class Program
             }
         }
     }
-
-
 
     static async Task<string> DownloadModpack(string downloadLink) {
         var browserFetcherOptions = new BrowserFetcherOptions();
@@ -238,6 +249,7 @@ class Program
         var browserFetcherOptions = new BrowserFetcherOptions();
         await new BrowserFetcher(browserFetcherOptions).DownloadAsync();
         string modsFolder = Path.Combine(outputFolderPath, "mods");
+        string textFolder = Path.Combine(outputFolderPath, "texturepacks");
 
         using var browser = await Puppeteer.LaunchAsync(new LaunchOptions
         {
@@ -245,34 +257,48 @@ class Program
             DefaultViewport = null
         });
 
-
-
-        if (!Directory.Exists(modsFolder))
-        {
-          Directory.CreateDirectory(modsFolder);
-        }
+        if (!Directory.Exists(modsFolder)) { Directory.CreateDirectory(modsFolder); }
+        if (!Directory.Exists(textFolder)) { Directory.CreateDirectory(textFolder); }
 
         Console.WriteLine($"Mods to download: {files.Count}");
         Console.WriteLine($"Output folder: {modsFolder}");
 
         foreach (var file in files)
         {
-            string downloadLink = $"{file.link}/files/{file.fileID}/";
+            string downloadLink = $"{file.link}/files/{file.fileID}";
 
             using var page = await browser.NewPageAsync();
             await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36");
             await page.SetViewportAsync(new ViewPortOptions { Width = 1920, Height = 1080 });
-            await page.Client.SendAsync("Page.setDownloadBehavior", new
+            if (downloadLink.Contains("/texture-packs/"))
             {
-                behavior = "allow",
-                downloadPath = Path.GetFullPath(modsFolder)
-            });
+                await page.Client.SendAsync("Page.setDownloadBehavior", new
+                {
+                    behavior = "allow",
+                    downloadPath = Path.GetFullPath(textFolder)
+                });
 
-            await page.Target.CreateCDPSessionAsync().Result.SendAsync("Page.setDownloadBehavior", new
+                await page.Target.CreateCDPSessionAsync().Result.SendAsync("Page.setDownloadBehavior", new
+                {
+                    behavior = "allow",
+                    downloadPath = Path.GetFullPath(textFolder)
+                }, false);
+            }
+            else
             {
-                behavior = "allow",
-                downloadPath = Path.GetFullPath(modsFolder)
-            }, false);
+                await page.Client.SendAsync("Page.setDownloadBehavior", new
+                {
+                    behavior = "allow",
+                    downloadPath = Path.GetFullPath(modsFolder)
+                });
+
+                await page.Target.CreateCDPSessionAsync().Result.SendAsync("Page.setDownloadBehavior", new
+                {
+                    behavior = "allow",
+                    downloadPath = Path.GetFullPath(modsFolder)
+                }, false);
+            }
+
 
             await page.GoToAsync(downloadLink);
 
@@ -319,6 +345,7 @@ class Program
         using (HttpClient client = new HttpClient())
         {
             HttpResponseMessage response = await client.GetAsync($"https://www.google.com/search?q=curseforge+project+ID+\"{query}\"");
+            Thread.Sleep(5000);
             if (response.IsSuccessStatusCode)
             {
                 string responseContent = await response.Content.ReadAsStringAsync();
@@ -333,6 +360,7 @@ class Program
                             {
                                 string substring = decodedStr.Substring(decodedStr.IndexOf("/mc-mods/"));
                                 substring = substring.Replace("/mc-mods/", "");
+                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
                                 firstResultUrl = substring;
                                 return firstResultUrl;
                             }
@@ -346,7 +374,22 @@ class Program
                             {
                                 string substring = decodedStr.Substring(decodedStr.IndexOf("/projects/"));
                                 substring = substring.Replace("/projects/", "");
+                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
                                 firstResultUrl = substring;
+                                return firstResultUrl;
+                            }
+                            catch (Exception ex)
+                            {
+                            }
+                        }
+                        if (decodedStr.Contains("/texture-packs/"))
+                        {
+                            try
+                            {
+                                string substring = decodedStr.Substring(decodedStr.IndexOf("/texture-packs/"));
+                                substring = substring.Replace("/texture-packs/", "");
+                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
+                                firstResultUrl = "#" + substring;
                                 return firstResultUrl;
                             }
                             catch (Exception ex)
@@ -359,6 +402,8 @@ class Program
             else
             {
                 Console.WriteLine("[HTTP] 503 Forbidden");
+                Console.WriteLine("Big Goog is mad right now. Try again later!");
+                Environment.Exit(2);
             }
         }
 
