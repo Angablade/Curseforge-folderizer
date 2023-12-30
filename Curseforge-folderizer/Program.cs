@@ -151,10 +151,10 @@ class Program
 
         using var browser = await Puppeteer.LaunchAsync(new LaunchOptions
         {
-            Headless = false,
-            DefaultViewport = null,
-            Args = new[] { "--window-size=1280,720" }
+            Headless = true,
+            DefaultViewport = null
         });
+
 
 
         if (!Directory.Exists(modsFolder))
@@ -170,7 +170,8 @@ class Program
             string downloadLink = $"{file.link}/files/{file.fileID}/";
 
             using var page = await browser.NewPageAsync();
-
+            await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36");
+            await page.SetViewportAsync(new ViewPortOptions { Width = 1920, Height = 1080 });
             await page.Client.SendAsync("Page.setDownloadBehavior", new
             {
                 behavior = "allow",
