@@ -163,7 +163,20 @@ class Program
     {
         try
         {
-            file.link = await GetFirstGoogleSearchResultUrl(file.projectID.ToString());
+            try {
+                Console.WriteLine("Trying Google hook.");
+                file.link = await GetFirstGoogleSearchResultUrl(file.projectID.ToString());
+            }catch (Exception e){}
+            
+            if(file.link.Length <= 3) {
+                try
+                {
+                    Console.WriteLine("Trying Yahoo hook.");
+                    file.link = await GetFirstYahooSearchResultUrl(file.projectID.ToString());
+                }
+                catch (Exception e) { }
+            }
+
             if (file.link.StartsWith("#")) {
                 file.link = "https://www.curseforge.com/minecraft/texture-packs/" + file.link.Replace("#", "");
             }
@@ -401,9 +414,75 @@ class Program
             }
             else
             {
-                Console.WriteLine("[HTTP] 503 Forbidden");
-                Console.WriteLine("Big Goog is mad right now. Try again later!");
-                Environment.Exit(2);
+                Console.WriteLine("[HTTP] 503 Google Hook Failed!");
+            }
+        }
+
+        return "";
+    }
+    static async Task<string> GetFirstYahooSearchResultUrl(string query)
+    {
+        string firstResultUrl = "";
+        using (HttpClient client = new HttpClient())
+        {
+            HttpResponseMessage response = await client.GetAsync($"https://search.yahoo.com/search?p=curseforge+project+ID+\"{query}\"");
+            Thread.Sleep(5000);
+            if (response.IsSuccessStatusCode)
+            {
+                string responseContent = await response.Content.ReadAsStringAsync();
+                foreach (string str in responseContent.Split('"'))
+                {
+                    string decodedStr = HttpUtility.UrlDecode(str).Replace("/url?q=", "");
+                    if (decodedStr.Contains("curseforge.com"))
+                    {
+                        if (decodedStr.Contains("/mc-mods/"))
+                        {
+                            try
+                            {
+                                string substring = decodedStr.Substring(decodedStr.IndexOf("/mc-mods/"));
+                                substring = substring.Replace("/mc-mods/", "");
+                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
+                                firstResultUrl = substring;
+                                return firstResultUrl;
+                            }
+                            catch (Exception ex)
+                            {
+                            }
+                        }
+                        if (decodedStr.Contains("/projects/"))
+                        {
+                            try
+                            {
+                                string substring = decodedStr.Substring(decodedStr.IndexOf("/projects/"));
+                                substring = substring.Replace("/projects/", "");
+                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
+                                firstResultUrl = substring;
+                                return firstResultUrl;
+                            }
+                            catch (Exception ex)
+                            {
+                            }
+                        }
+                        if (decodedStr.Contains("/texture-packs/"))
+                        {
+                            try
+                            {
+                                string substring = decodedStr.Substring(decodedStr.IndexOf("/texture-packs/"));
+                                substring = substring.Replace("/texture-packs/", "");
+                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
+                                firstResultUrl = "#" + substring;
+                                return firstResultUrl;
+                            }
+                            catch (Exception ex)
+                            {
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("[HTTP] 503 Yahoo Hook Failed!");
             }
         }
 
