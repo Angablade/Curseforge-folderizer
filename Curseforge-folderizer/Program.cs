@@ -11,11 +11,20 @@ using PuppeteerSharp;
 
 class Program
 {
-    static async Task Main(string[] args)
+    static async Task<string> Main(string[] args)
     {
         Console.WriteLine("Starting Modpack Processing...");
 
         string zipFilePath = args[0];
+
+        if(zipFilePath == null) {
+            return ("You forgot to enter something.");
+        }
+        else if(IsWebUrl(zipFilePath))
+        {
+            zipFilePath = await DownloadModpack(zipFilePath);
+        }
+
         string extractionDirectory = Path.Combine(Directory.GetCurrentDirectory(), ".modpack");
         Directory.CreateDirectory(extractionDirectory);
 
@@ -52,6 +61,8 @@ class Program
         Console.WriteLine($"Deleting extraction directory: {extractionDirectory}");
         Directory.Delete(extractionDirectory, true);
         Console.WriteLine("Processing completed successfully.");
+        
+        return "Task Finished";
     }
 
     static void ExtractFilesFromZip(string zipFilePath, string extractionDirectory, string outputFolderPath, params string[] fileNames)
@@ -143,6 +154,57 @@ class Program
         }
     }
 
+    static async Task<string> DownloadModpack(string downloadLink) {
+        var browserFetcherOptions = new BrowserFetcherOptions();
+        await new BrowserFetcher(browserFetcherOptions).DownloadAsync();
+
+        using var browser = await Puppeteer.LaunchAsync(new LaunchOptions
+        {
+            Headless = true,
+            DefaultViewport = null
+        });
+
+        using var page = await browser.NewPageAsync();
+        await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36");
+        await page.SetViewportAsync(new ViewPortOptions { Width = 1920, Height = 1080 });
+        await page.Client.SendAsync("Page.setDownloadBehavior", new
+        {
+            behavior = "allow",
+            downloadPath = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)
+        });
+
+        await page.Target.CreateCDPSessionAsync().Result.SendAsync("Page.setDownloadBehavior", new
+        {
+            behavior = "allow",
+            downloadPath = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)
+        }, false);
+
+        await page.GoToAsync(downloadLink);
+        await page.WaitForTimeoutAsync(5000);
+
+        string fileName = await page.EvaluateExpressionAsync<string>(
+           "document.querySelector('.section-file-name p').innerText");
+
+        string selector = ".btn-cta.download-cta";
+        await page.WaitForSelectorAsync(selector);
+        var downloadButtons = await page.QuerySelectorAllAsync(selector);
+
+        if (downloadButtons.Count() > 1)
+        {
+            await downloadButtons[downloadButtons.Count() - 1].ClickAsync();
+        }
+
+        await page.WaitForTimeoutAsync(9000);
+
+        Console.WriteLine($"Waiting for file: {fileName}");
+
+        await WaitForFileAsync(AppDomain.CurrentDomain.BaseDirectory, fileName);
+
+        Console.WriteLine($"Modpack downloaded!");
+
+        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+    }
+
     static async Task ProcessLinksAndDownloadAsync(List<FileData> files, string outputFolderPath)
     {
         var browserFetcherOptions = new BrowserFetcherOptions();
@@ -200,6 +262,21 @@ class Program
             await page.WaitForTimeoutAsync(9000);
             Console.WriteLine($"{file.fileID} downloaded!");
         }
+    }
+
+    static async Task WaitForFileAsync(string directory, string fileName)
+    {
+        while (!File.Exists(Path.Combine(directory, fileName)))
+        {
+            Console.Write(".");
+            await Task.Delay(1000);
+        }
+    }
+
+
+    static bool IsWebUrl(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out Uri uriResult) && uriResult.Scheme == Uri.UriSchemeHttp;
     }
 }
 
