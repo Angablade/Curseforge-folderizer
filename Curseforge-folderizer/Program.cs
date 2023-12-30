@@ -18,8 +18,9 @@ class Program
         Console.WriteLine("Starting Modpack Processing...");
 
         string zipFilePath = args[0];
-        
-        if(!File.Exists(zipFilePath) && zipFilePath.ToLower().StartsWith("http"))
+
+
+        if (!File.Exists(zipFilePath) && zipFilePath.ToLower().StartsWith("http"))
         {
             Console.WriteLine("Downloading modpack!");
             zipFilePath = await DownloadModpack(zipFilePath);
@@ -37,7 +38,7 @@ class Program
         ExtractFilesFromZip(zipFilePath, extractionDirectory, outputFolderPath, "manifest.json", "modlist.html");
         Console.WriteLine("Files extracted successfully.");
 
-            
+
 
         ModpackData modpackData = ReadManifestJson(Path.Combine(extractionDirectory, "manifest.json"));
 
@@ -49,17 +50,17 @@ class Program
 
             if (modLinks.Length > 0)
             {
-                for (int i = 0; i < Math.Min(modLinks.Length, modpackData.Files.Count); i++)
+                for (int i = 0; i < Math.Min(modLinks.Length, modpackData.files.Count); i++)
                 {
-                    modpackData.Files[i].Link = modLinks[i];
+                    modpackData.files[i].link = modLinks[i];
                 }
             }
-        }catch (Exception ex)
+        }
+        catch (Exception ex)
         {
-            Console.WriteLine(ex.HResult);
             Console.WriteLine("Failed to read Modlist.html, trying alt method.");
             List<Task> tasks = new List<Task>();
-            foreach (var file in modpackData.Files)
+            foreach (var file in modpackData.files)
             {
                 tasks.Add(ProcessFileAsync(file));
             }
@@ -67,12 +68,12 @@ class Program
         }
 
 
-        string outputFilePath = Path.Combine(outputFolderPath, $"{SanitizeName(modpackData.Name)}_{modpackData.Version}.txt");
+        string outputFilePath = Path.Combine(outputFolderPath, $"{SanitizeName(modpackData.name)}_{modpackData.version}.txt");
         Console.WriteLine($"Writing modpack info to: {outputFilePath}");
         WriteModpackInfo(outputFilePath, modpackData);
 
         Console.WriteLine("Processing mod links and downloading files...");
-        await ProcessLinksAndDownloadAsync(modpackData.Files, outputFolderPath);
+        await ProcessLinksAndDownloadAsync(modpackData.files, outputFolderPath);
 
         Console.WriteLine($"Deleting extraction directory: {extractionDirectory}");
         Directory.Delete(extractionDirectory, true);
@@ -88,12 +89,14 @@ class Program
             {
                 Parallel.ForEach(zipArchive.Entries, (entry, state) =>
                 {
-                    if (entry.Length > 3) { 
+                    if (entry.Length > 3)
+                    {
                         Console.WriteLine("Reading file: " + entry);
                         string entryName = DetectAndConvertEntryName(zipArchive, entry.FullName);
                         entryName = entryName.Substring(entryName.IndexOf("/") + 1).Replace("/".ToArray()[0], Path.DirectorySeparatorChar);
 
-                        try { 
+                        try
+                        {
                             if (fileNames.Contains(entryName))
                             {
                                 string filePath = Path.Combine(extractionDirectory, entryName);
@@ -110,17 +113,19 @@ class Program
                                 Console.WriteLine("Extracting: " + entryName);
                                 entry.ExtractToFile(filePath, true);
                             }
-                        }catch (Exception ex)
+                        }
+                        catch (Exception ex)
                         {
                             Console.WriteLine(ex.ToString());
                         }
 
                     }
-                   
+
                 });
 
             }
-        }catch (Exception ex)
+        }
+        catch (Exception ex)
         {
             Console.WriteLine(ex.ToString());
         }
@@ -163,31 +168,45 @@ class Program
     {
         try
         {
-            try {
-                Console.WriteLine("Trying Google hook.");
-                file.Link = await GetFirstGoogleSearchResultUrl(file.ProjectID.ToString());
-            }catch (Exception e) { Console.WriteLine(e.ToString()); }
-            
-            if(file.Link.Length <= 3) {
+            List<Func<string, Task<string>>> searchEngines = new List<Func<string, Task<string>>>
+            {
+                GetFirstGoogleSearchResultUrl,
+                GetFirstYahooSearchResultUrl,
+                GetFirstDuckDuckGoSearchResultUrl
+            };
+            foreach (var searchEngine in searchEngines)
+            {
                 try
                 {
-                    Console.WriteLine("Trying Yahoo hook.");
-                    file.Link = await GetFirstYahooSearchResultUrl(file.ProjectID.ToString());
+                    Console.WriteLine($"Trying {searchEngine.Method.Name} hook.".Replace("GetFirstGoogleSearchResultUrl","GoogleAPI").Replace("GetFirstYahooSearchResultUrl", "YahooAPI").Replace("GetFirstDuckDuckGoSearchResultUrl", "DuckDuckGoAPI"));
+                    file.link = await searchEngine(file.projectID.ToString());
+                    if (file.link.Length > 3) {
+                        break;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"{searchEngine.Method.Name} hook Failed!");
+                    }
                 }
-                catch (Exception e) { Console.WriteLine(e.ToString()); }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e.ToString());
+                }
             }
 
-            if (file.Link.StartsWith("#")) {
-                file.Link = "https://www.curseforge.com/minecraft/texture-packs/" + file.Link.Replace("#", "");
+            if (file.link.StartsWith("#"))
+            {
+                file.link = "https://www.curseforge.com/minecraft/texture-packs/" + file.link.Replace("#", "");
             }
-            else {
-                file.Link = "https://www.curseforge.com/minecraft/mc-mods/" + file.Link;
+            else
+            {
+                file.link = "https://www.curseforge.com/minecraft/mc-mods/" + file.link;
             }
-            Console.WriteLine($"Project Mask: {file.ProjectID.ToString()} -> {file.Link}");
+            Console.WriteLine($"Project Mask: {file.projectID.ToString()} -> {file.link}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to get link for project ID {file.ProjectID}. Exception: {ex}");
+            Console.WriteLine($"Failed to get link for project ID {file.projectID}. Exception: {ex}");
             Environment.Exit(1);
         }
     }
@@ -195,17 +214,18 @@ class Program
     {
         using (StreamWriter writer = new StreamWriter(outputFilePath))
         {
-            writer.WriteLine($"Modpack Name: {modpackData.Name}");
-            writer.WriteLine($"Modpack Version: {modpackData.Version}");
+            writer.WriteLine($"Modpack Name: {modpackData.name}");
+            writer.WriteLine($"Modpack Version: {modpackData.version}");
             writer.WriteLine("Files:");
-            foreach (var file in modpackData.Files)
+            foreach (var file in modpackData.files)
             {
-                writer.WriteLine($"- Project ID: {file.ProjectID}, File ID: {file.FileID}, Link: {file.Link}");
+                writer.WriteLine($"- Project ID: {file.projectID}, File ID: {file.fileID}, Link: {file.link}");
             }
         }
     }
 
-    static async Task<string> DownloadModpack(string downloadLink) {
+    static async Task<string> DownloadModpack(string downloadLink)
+    {
         var browserFetcherOptions = new BrowserFetcherOptions();
         await new BrowserFetcher(browserFetcherOptions).DownloadAsync();
 
@@ -278,7 +298,7 @@ class Program
 
         foreach (var file in files)
         {
-            string downloadLink = $"{file.Link}/files/{file.FileID}";
+            string downloadLink = $"{file.link}/files/{file.fileID}";
 
             using var page = await browser.NewPageAsync();
             await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36");
@@ -325,9 +345,9 @@ class Program
             {
                 await downloadButtons[downloadButtons.Count() - 1].ClickAsync();
             }
-            
+
             await page.WaitForTimeoutAsync(9000);
-            Console.WriteLine($"{file.FileID} downloaded!");
+            Console.WriteLine($"{file.fileID} downloaded!");
         }
     }
 
@@ -335,7 +355,8 @@ class Program
     {
         while (true)
         {
-            if (File.Exists(Path.Combine(directory, fileName))){
+            if (File.Exists(Path.Combine(directory, fileName)))
+            {
                 Console.WriteLine($"Finding: {fileName}");
                 break;
             }
@@ -352,12 +373,12 @@ class Program
         return fileName;
     }
 
-    static async Task<string> GetFirstGoogleSearchResultUrl(string query)
+    static async Task<string> GetFirstSearchResultUrl(string searchEngineUrl, string query)
     {
         string firstResultUrl = "";
         using (HttpClient client = new HttpClient())
         {
-            HttpResponseMessage response = await client.GetAsync($"https://www.google.com/search?q=curseforge+project+ID+\"{query}\"");
+            HttpResponseMessage response = await client.GetAsync($"{searchEngineUrl}\"{query}\"");
             Thread.Sleep(5000);
             if (response.IsSuccessStatusCode)
             {
@@ -423,76 +444,18 @@ class Program
 
         return "";
     }
+
+    static async Task<string> GetFirstGoogleSearchResultUrl(string query)
+    {
+        return await GetFirstSearchResultUrl("https://www.google.com/search?q=site%3Acurseforge.com+Project+ID%3A+", query);
+    }
     static async Task<string> GetFirstYahooSearchResultUrl(string query)
     {
-        string firstResultUrl = "";
-        using (HttpClient client = new HttpClient())
-        {
-            HttpResponseMessage response = await client.GetAsync($"https://search.yahoo.com/search?p=curseforge+project+ID+\"{query}\"");
-            Thread.Sleep(5000);
-            if (response.IsSuccessStatusCode)
-            {
-                string responseContent = await response.Content.ReadAsStringAsync();
-                foreach (string str in responseContent.Split('"'))
-                {
-                    string decodedStr = HttpUtility.UrlDecode(str).Replace("/url?q=", "");
-                    if (decodedStr.Contains("curseforge.com"))
-                    {
-                        if (decodedStr.Contains("/mc-mods/"))
-                        {
-                            try
-                            {
-                                string substring = decodedStr.Substring(decodedStr.IndexOf("/mc-mods/"));
-                                substring = substring.Replace("/mc-mods/", "");
-                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
-                                firstResultUrl = substring;
-                                return firstResultUrl;
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine(ex.ToString());
-                            }
-                        }
-                        if (decodedStr.Contains("/projects/"))
-                        {
-                            try
-                            {
-                                string substring = decodedStr.Substring(decodedStr.IndexOf("/projects/"));
-                                substring = substring.Replace("/projects/", "");
-                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
-                                firstResultUrl = substring;
-                                return firstResultUrl;
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine(ex.ToString());
-                            }
-                        }
-                        if (decodedStr.Contains("/texture-packs/"))
-                        {
-                            try
-                            {
-                                string substring = decodedStr.Substring(decodedStr.IndexOf("/texture-packs/"));
-                                substring = substring.Replace("/texture-packs/", "");
-                                if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
-                                firstResultUrl = "#" + substring;
-                                return firstResultUrl;
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine(ex.ToString());
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                Console.WriteLine("[HTTP] 503 Yahoo Hook Failed!");
-            }
-        }
-
-        return "";
+        return await GetFirstSearchResultUrl("https://search.yahoo.com/search?p=site%253Acurseforge.com+Project+ID%253A+", query);
+    }
+    static async Task<string> GetFirstDuckDuckGoSearchResultUrl(string query)
+    {
+        return await GetFirstSearchResultUrl("https://duckduckgo.com/?t=h_&q=site%253Acurseforge.com+Project+ID%253A+", query);
     }
 }
 
@@ -501,30 +464,30 @@ public class ModpackData
 {
     public ModpackData()
     {
-        Version = "";
+        version = "";
     }
 
     public class ModLoader
     {
-        public string? Id { get; set; }
-        public bool Primary { get; set; }
+        public string? id { get; set; }
+        public bool primary { get; set; }
     }
 
-    public dynamic? Minecraft { get; set; }
-    public List<ModLoader>? ModLoaders { get; set; }
-    public string? ManifestType { get; set; }
-    public int ManifestVersion { get; set; }
-    public string? Name { get; set; }
-    public string? Version { get; set; }
-    public string? Author { get; set; }
+    public dynamic minecraft { get; set; }
+    public List<ModLoader> modLoaders { get; set; }
+    public string? manifestType { get; set; }
+    public int manifestVersion { get; set; }
+    public string? name { get; set; }
+    public string? version { get; set; }
+    public string? author { get; set; }
     public int projectID { get; set; }
-    public List<FileData>? Files { get; set; }
-    public string? Overriders { get; set; }
+    public List<FileData> files { get; set; }
+    public string? overriders { get; set; }
 }
 public class FileData
 {
-    public int ProjectID { get; set; }
-    public int FileID { get; set; }
-    public bool Required { get; set; }
-    public string? Link { get; set; }
+    public int projectID { get; set; }
+    public int fileID { get; set; }
+    public bool required { get; set; }
+    public string? link { get; set; }
 }

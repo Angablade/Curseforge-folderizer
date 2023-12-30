@@ -2,7 +2,7 @@
   "profiles": {
     "Curseforge-folderizer": {
       "commandName": "Project",
-      "commandLineArgs": "\"https://www.curseforge.com/minecraft/modpacks/the-pixelmon-modpack/files/4838829\""
+      "commandLineArgs": "\"The+Pixelmon+Modpack+9.2.5.zip\""
     }
   }
 }
