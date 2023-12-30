@@ -50,16 +50,17 @@ class Program
 
             if (modLinks.Length > 0)
             {
-                for (int i = 0; i < Math.Min(modLinks.Length, modpackData.files.Count); i++)
+                for (int i = 0; i < Math.Min(modLinks.Length, modpackData.Files.Count); i++)
                 {
-                    modpackData.files[i].link = modLinks[i];
+                    modpackData.Files[i].Link = modLinks[i];
                 }
             }
         }catch (Exception ex)
         {
+            Console.WriteLine(ex.HResult);
             Console.WriteLine("Failed to read Modlist.html, trying alt method.");
             List<Task> tasks = new List<Task>();
-            foreach (var file in modpackData.files)
+            foreach (var file in modpackData.Files)
             {
                 tasks.Add(ProcessFileAsync(file));
             }
@@ -67,12 +68,12 @@ class Program
         }
 
 
-        string outputFilePath = Path.Combine(outputFolderPath, $"{SanitizeName(modpackData.name)}_{modpackData.version}.txt");
+        string outputFilePath = Path.Combine(outputFolderPath, $"{SanitizeName(modpackData.Name)}_{modpackData.Version}.txt");
         Console.WriteLine($"Writing modpack info to: {outputFilePath}");
         WriteModpackInfo(outputFilePath, modpackData);
 
         Console.WriteLine("Processing mod links and downloading files...");
-        await ProcessLinksAndDownloadAsync(modpackData.files, outputFolderPath);
+        await ProcessLinksAndDownloadAsync(modpackData.Files, outputFolderPath);
 
         Console.WriteLine($"Deleting extraction directory: {extractionDirectory}");
         Directory.Delete(extractionDirectory, true);
@@ -165,29 +166,29 @@ class Program
         {
             try {
                 Console.WriteLine("Trying Google hook.");
-                file.link = await GetFirstGoogleSearchResultUrl(file.projectID.ToString());
-            }catch (Exception e){}
+                file.Link = await GetFirstGoogleSearchResultUrl(file.ProjectID.ToString());
+            }catch (Exception e) { Console.WriteLine(e.ToString()); }
             
-            if(file.link.Length <= 3) {
+            if(file.Link.Length <= 3) {
                 try
                 {
                     Console.WriteLine("Trying Yahoo hook.");
-                    file.link = await GetFirstYahooSearchResultUrl(file.projectID.ToString());
+                    file.Link = await GetFirstYahooSearchResultUrl(file.ProjectID.ToString());
                 }
-                catch (Exception e) { }
+                catch (Exception e) { Console.WriteLine(e.ToString()); }
             }
 
-            if (file.link.StartsWith("#")) {
-                file.link = "https://www.curseforge.com/minecraft/texture-packs/" + file.link.Replace("#", "");
+            if (file.Link.StartsWith("#")) {
+                file.Link = "https://www.curseforge.com/minecraft/texture-packs/" + file.Link.Replace("#", "");
             }
             else {
-                file.link = "https://www.curseforge.com/minecraft/mc-mods/" + file.link;
+                file.Link = "https://www.curseforge.com/minecraft/mc-mods/" + file.Link;
             }
-            Console.WriteLine($"Project Mask: {file.projectID.ToString()} -> {file.link}");
+            Console.WriteLine($"Project Mask: {file.ProjectID.ToString()} -> {file.Link}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to get link for project ID {file.projectID}. Exception: {ex}");
+            Console.WriteLine($"Failed to get link for project ID {file.ProjectID}. Exception: {ex}");
             Environment.Exit(1);
         }
     }
@@ -195,12 +196,12 @@ class Program
     {
         using (StreamWriter writer = new StreamWriter(outputFilePath))
         {
-            writer.WriteLine($"Modpack Name: {modpackData.name}");
-            writer.WriteLine($"Modpack Version: {modpackData.version}");
+            writer.WriteLine($"Modpack Name: {modpackData.Name}");
+            writer.WriteLine($"Modpack Version: {modpackData.Version}");
             writer.WriteLine("Files:");
-            foreach (var file in modpackData.files)
+            foreach (var file in modpackData.Files)
             {
-                writer.WriteLine($"- Project ID: {file.projectID}, File ID: {file.fileID}, Link: {file.link}");
+                writer.WriteLine($"- Project ID: {file.ProjectID}, File ID: {file.FileID}, Link: {file.Link}");
             }
         }
     }
@@ -278,7 +279,7 @@ class Program
 
         foreach (var file in files)
         {
-            string downloadLink = $"{file.link}/files/{file.fileID}";
+            string downloadLink = $"{file.Link}/files/{file.FileID}";
 
             using var page = await browser.NewPageAsync();
             await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36");
@@ -327,7 +328,7 @@ class Program
             }
             
             await page.WaitForTimeoutAsync(9000);
-            Console.WriteLine($"{file.fileID} downloaded!");
+            Console.WriteLine($"{file.FileID} downloaded!");
         }
     }
 
@@ -379,6 +380,7 @@ class Program
                             }
                             catch (Exception ex)
                             {
+                                Console.WriteLine(ex.ToString());
                             }
                         }
                         if (decodedStr.Contains("/projects/"))
@@ -393,6 +395,7 @@ class Program
                             }
                             catch (Exception ex)
                             {
+                                Console.WriteLine(ex.ToString());
                             }
                         }
                         if (decodedStr.Contains("/texture-packs/"))
@@ -407,6 +410,7 @@ class Program
                             }
                             catch (Exception ex)
                             {
+                                Console.WriteLine(ex.ToString());
                             }
                         }
                     }
@@ -447,6 +451,7 @@ class Program
                             }
                             catch (Exception ex)
                             {
+                                Console.WriteLine(ex.ToString());
                             }
                         }
                         if (decodedStr.Contains("/projects/"))
@@ -461,6 +466,7 @@ class Program
                             }
                             catch (Exception ex)
                             {
+                                Console.WriteLine(ex.ToString());
                             }
                         }
                         if (decodedStr.Contains("/texture-packs/"))
@@ -475,6 +481,7 @@ class Program
                             }
                             catch (Exception ex)
                             {
+                                Console.WriteLine(ex.ToString());
                             }
                         }
                     }
@@ -495,30 +502,30 @@ public class ModpackData
 {
     public ModpackData()
     {
-        version = "";
+        Version = "";
     }
 
     public class ModLoader
     {
-        public string? id { get; set; }
-        public bool primary { get; set; }
+        public string? Id { get; set; }
+        public bool Primary { get; set; }
     }
 
-    public dynamic minecraft { get; set; }
-    public List<ModLoader> modLoaders { get; set; }
-    public string? manifestType { get; set; }
-    public int manifestVersion { get; set; }
-    public string? name { get; set; }
-    public string? version { get; set; }
-    public string? author { get; set; }
+    public dynamic? Minecraft { get; set; }
+    public List<ModLoader>? ModLoaders { get; set; }
+    public string? ManifestType { get; set; }
+    public int ManifestVersion { get; set; }
+    public string? Name { get; set; }
+    public string? Version { get; set; }
+    public string? Author { get; set; }
     public int projectID { get; set; }
-    public List<FileData> files { get; set; }
-    public string? overriders { get; set; }
+    public List<FileData>? Files { get; set; }
+    public string? Overriders { get; set; }
 }
 public class FileData
 {
-    public int projectID { get; set; }
-    public int fileID { get; set; }
-    public bool required { get; set; }
-    public string? link { get; set; }
+    public int ProjectID { get; set; }
+    public int FileID { get; set; }
+    public bool Required { get; set; }
+    public string? Link { get; set; }
 }

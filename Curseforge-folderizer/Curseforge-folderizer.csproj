@@ -7,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <StartupObject>Program</StartupObject>
+    <ApplicationIcon>curseforge-folderizer.ico</ApplicationIcon>
+    <NoWin32Manifest>true</NoWin32Manifest>
+    <IsPublishable>False</IsPublishable>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -16,6 +19,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DebugType>none</DebugType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="curseforge-folderizer.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="PuppeteerSharp" Version="13.0.2" />
