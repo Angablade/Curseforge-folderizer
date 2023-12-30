@@ -19,7 +19,6 @@ class Program
 
         string zipFilePath = args[0];
         
-        
         if(!File.Exists(zipFilePath) && zipFilePath.ToLower().StartsWith("http"))
         {
             Console.WriteLine("Downloading modpack!");
