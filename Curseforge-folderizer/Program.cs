@@ -177,15 +177,15 @@ class Program
         {
             List<Func<string, Task<string>>> searchEngines = new List<Func<string, Task<string>>>
             {
-                GetFirstGoogleSearchResultUrl,
-                GetFirstYahooSearchResultUrl,
-                GetFirstDuckDuckGoSearchResultUrl
+                GoogleAPI,
+                YahooAPI,
+                
             };
             foreach (var searchEngine in searchEngines)
             {
                 try
                 {
-                    Console.WriteLine($"Trying {searchEngine.Method.Name} hook.".Replace("GetFirstGoogleSearchResultUrl","GoogleAPI").Replace("GetFirstYahooSearchResultUrl", "YahooAPI").Replace("GetFirstDuckDuckGoSearchResultUrl", "DuckDuckGoAPI"));
+                    Console.WriteLine($"Trying {searchEngine.Method.Name} hook.");
                     file.link = await searchEngine(file.projectID.ToString());
                     if (file.link.Length > 3) {
                         break;
@@ -304,8 +304,7 @@ class Program
 
         Console.WriteLine($"Mods to download: {files.Count}");
         Console.WriteLine("[File ID] [Status]    [Mask Name]     [Progress]");
-        //Console.WriteLine($"Output folder: {modsFolder}");
-
+      
         foreach (var file in files)
         {
             string downloadLink = $"{file.link}/files/{file.fileID}";
@@ -461,15 +460,15 @@ class Program
         return "";
     }
 
-    static async Task<string> GetFirstGoogleSearchResultUrl(string query)
+    static async Task<string> GoogleAPI(string query)
     {
         return await GetFirstSearchResultUrl("https://www.google.com/search?q=site%3Acurseforge.com+Project+ID%3A+", query);
     }
-    static async Task<string> GetFirstYahooSearchResultUrl(string query)
+    static async Task<string> YahooAPI(string query)
     {
         return await GetFirstSearchResultUrl("https://search.yahoo.com/search?p=site%253Acurseforge.com+Project+ID%253A+", query);
     }
-    static async Task<string> GetFirstDuckDuckGoSearchResultUrl(string query)
+    static async Task<string> DuckDuckGoAPI(string query)
     {
         return await GetFirstSearchResultUrl("https://duckduckgo.com/?t=h_&q=site%253Acurseforge.com+Project+ID%253A+", query);
     }
