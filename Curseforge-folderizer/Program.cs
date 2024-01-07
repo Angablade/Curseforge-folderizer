@@ -10,15 +10,22 @@ using System.IO.Compression;
 using PuppeteerSharp;
 using System.Web;
 using System.Collections;
+using System.Diagnostics;
 
 class Program
 {
     static async Task Main(string[] args)
     {
+       
+        if (args.Length == 0 )
+        {
+            KillSpecificChromeProcess();
+            Environment.Exit(0);
+        }
+
+
         Console.WriteLine("Starting Modpack Processing...");
-
         string zipFilePath = args[0];
-
 
         if (!File.Exists(zipFilePath) && zipFilePath.ToLower().StartsWith("http"))
         {
@@ -38,8 +45,6 @@ class Program
         ExtractFilesFromZip(zipFilePath, extractionDirectory, outputFolderPath, "manifest.json", "modlist.html");
         Console.WriteLine("Files extracted successfully.");
 
-
-
         ModpackData modpackData = ReadManifestJson(Path.Combine(extractionDirectory, "manifest.json"));
 
         try
@@ -53,6 +58,8 @@ class Program
                 for (int i = 0; i < Math.Min(modLinks.Length, modpackData.files.Count); i++)
                 {
                     modpackData.files[i].link = modLinks[i];
+                    modpackData.files[i].mask = modLinks[i].TrimEnd("/".ToCharArray()[0]);
+                    modpackData.files[i].mask = modpackData.files[i].mask.Substring(modpackData.files[i].mask.LastIndexOf("/"));
                 }
             }
         }
@@ -196,13 +203,15 @@ class Program
 
             if (file.link.StartsWith("#"))
             {
+                file.mask = file.link.Replace("-", " ");
                 file.link = "https://www.curseforge.com/minecraft/texture-packs/" + file.link.Replace("#", "");
             }
             else
             {
+                file.mask = file.link.Replace("-"," ");
                 file.link = "https://www.curseforge.com/minecraft/mc-mods/" + file.link;
             }
-            Console.WriteLine($"Project Mask: {file.projectID.ToString()} -> {file.link}");
+            Console.WriteLine($"Project Mask: {file.projectID.ToString()} -> {file.mask}");
         }
         catch (Exception ex)
         {
@@ -294,11 +303,15 @@ class Program
         if (!Directory.Exists(textFolder)) { Directory.CreateDirectory(textFolder); }
 
         Console.WriteLine($"Mods to download: {files.Count}");
-        Console.WriteLine($"Output folder: {modsFolder}");
+        Console.WriteLine("[File ID] [Status]    [Mask Name]     [Progress]");
+        //Console.WriteLine($"Output folder: {modsFolder}");
 
         foreach (var file in files)
         {
             string downloadLink = $"{file.link}/files/{file.fileID}";
+
+            Console.Write($"[{file.fileID:D7}] Downloading {Truncate(file.mask, 15),-15} ");
+
 
             using var page = await browser.NewPageAsync();
             await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36");
@@ -332,22 +345,22 @@ class Program
                 }, false);
             }
 
-
+            Console.Write(".");
             await page.GoToAsync(downloadLink);
-
+            Console.Write(".");
             await page.WaitForTimeoutAsync(5000);
-
+            Console.Write(".");
             string selector = ".btn-cta.download-cta";
             await page.WaitForSelectorAsync(selector);
             var downloadButtons = await page.QuerySelectorAllAsync(selector);
-
+            Console.Write(".");
             if (downloadButtons.Count() > 1)
             {
                 await downloadButtons[downloadButtons.Count() - 1].ClickAsync();
             }
-
-            await page.WaitForTimeoutAsync(9000);
-            Console.WriteLine($"{file.fileID} downloaded!");
+            Console.Write(".");
+            await page.WaitForTimeoutAsync(7000);
+            Console.WriteLine(" [ok]");
         }
     }
 
@@ -395,6 +408,7 @@ class Program
                                 string substring = decodedStr.Substring(decodedStr.IndexOf("/mc-mods/"));
                                 substring = substring.Replace("/mc-mods/", "");
                                 if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
+                                if (substring.Contains("&")) { substring = substring.Substring(0, substring.IndexOf("&")); }
                                 firstResultUrl = substring;
                                 return firstResultUrl;
                             }
@@ -410,6 +424,7 @@ class Program
                                 string substring = decodedStr.Substring(decodedStr.IndexOf("/projects/"));
                                 substring = substring.Replace("/projects/", "");
                                 if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
+                                if (substring.Contains("&")) { substring = substring.Substring(0, substring.IndexOf("&")); }
                                 firstResultUrl = substring;
                                 return firstResultUrl;
                             }
@@ -425,6 +440,7 @@ class Program
                                 string substring = decodedStr.Substring(decodedStr.IndexOf("/texture-packs/"));
                                 substring = substring.Replace("/texture-packs/", "");
                                 if (substring.Contains("/")) { substring = substring.Substring(0, substring.IndexOf("/")); }
+                                if (substring.Contains("&")) { substring = substring.Substring(0, substring.IndexOf("&")); }
                                 firstResultUrl = "#" + substring;
                                 return firstResultUrl;
                             }
@@ -457,9 +473,31 @@ class Program
     {
         return await GetFirstSearchResultUrl("https://duckduckgo.com/?t=h_&q=site%253Acurseforge.com+Project+ID%253A+", query);
     }
+
+    public static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
+    }
+
+    static async Task KillSpecificChromeProcess()
+    {
+        var options = new LaunchOptions
+        {
+            Headless = true
+        };
+
+        using (var browser = await Puppeteer.LaunchAsync(options))
+        {
+            var page = await browser.NewPageAsync();
+            await page.CloseAsync();
+        }
+    }
 }
-
-
 public class ModpackData
 {
     public ModpackData()
@@ -489,5 +527,6 @@ public class FileData
     public int projectID { get; set; }
     public int fileID { get; set; }
     public bool required { get; set; }
+    public string? mask { get; set; }
     public string? link { get; set; }
 }

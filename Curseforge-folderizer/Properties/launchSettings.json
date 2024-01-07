@@ -2,7 +2,9 @@
   "profiles": {
     "Curseforge-folderizer": {
       "commandName": "Project",
-      "commandLineArgs": "\"The+Pixelmon+Modpack+9.2.5.zip\""
+      "commandLineArgs": "\"The+Pixelmon+Modpack+9.2.5.zip\"",
+      "nativeDebugging": true,
+      "remoteDebugEnabled": false
     }
   }
 }
